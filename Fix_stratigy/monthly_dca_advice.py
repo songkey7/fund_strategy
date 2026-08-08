@@ -23,7 +23,7 @@ FUND_META = {
     "013309": {
         "fund_code": "013309",
         "fund_name": "易方达恒生科技ETF联接C",
-        "index_code": None,
+        "index_code": "HSTECH",
     },
 }
 
@@ -36,18 +36,25 @@ def fetch_index_pe(index_code, fallback_lg=None):
         if index_code == "000510":
             df = ak.stock_zh_index_value_csindex(symbol=index_code)
             col = "市盈率1"
+            source_type = "pe"
+        elif index_code == "HSTECH":
+            df = ak.stock_hk_index_daily_sina(symbol=index_code)
+            col = "close"
+            source_type = "price"
         elif fallback_lg:
             df = ak.stock_index_pe_lg(symbol=fallback_lg)
             col = "滚动市盈率"
+            source_type = "pe"
         else:
             return None
 
-        pe1 = df[col].dropna()
-        latest_pe = pe1.iloc[-1]
-        percentile = round((pe1 < latest_pe).sum() / len(pe1) * 100, 1)
+        vals = df[col].dropna()
+        latest_val = vals.iloc[-1]
+        percentile = round((vals < latest_val).sum() / len(vals) * 100, 1)
         return {
-            "latest_pe": latest_pe,
+            "latest_val": latest_val,
             "percentile": percentile,
+            "source_type": source_type,
         }
     except Exception as e:
         print(f"  获取PE失败 {index_code}: {e}")
@@ -113,9 +120,10 @@ def generate_html(advices, month_label):
 
         pe_line = ""
         if a["pe"] > 0:
-            pe_line = f'<span>PE {a["pe"]:.2f} · 百分位 {a["percentile"]}%{note}</span>'
+            label = "PE" if a.get("source_type") == "pe" else "点位"
+            pe_line = f'<span>{label} {a["pe"]:.2f} · 百分位 {a["percentile"]}%{note}</span>'
         else:
-            pe_line = '<span style="color:#aaa">暂无PE数据 · 默认1.0x</span>'
+            pe_line = '<span style="color:#aaa">暂无估值数据</span>'
 
         rows += f"""
 <div style="{card}">
@@ -193,8 +201,9 @@ def main():
 
         if pe_info:
             multiplier, status = calc_dca_multiplier(pe_info["percentile"])
-            pe_str = f"PE: {pe_info['latest_pe']:.2f} · 百分位 {pe_info['percentile']}% · {status}"
-            pe_val = pe_info['latest_pe']
+            label = "PE" if pe_info["source_type"] == "pe" else "点位"
+            pe_str = f"{label}: {pe_info['latest_val']:.2f} · 百分位 {pe_info['percentile']}% · {status}"
+            pe_val = pe_info['latest_val']
             pct = pe_info['percentile']
         else:
             multiplier = 1.0
@@ -213,6 +222,7 @@ def main():
             "fund_name": meta["fund_name"],
             "pe": pe_val,
             "percentile": pct,
+            "source_type": pe_info.get("source_type") if pe_info else "pe",
             "multiplier": multiplier,
             "status": status,
             "pe_fallback_lg": pe_note,

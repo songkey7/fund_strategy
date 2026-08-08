@@ -35,7 +35,7 @@ FUND_META = {
     "013309": {
         "fund_code": "013309",
         "fund_name": "易方达恒生科技ETF联接C",
-        "index_code": None,
+        "index_code": "HSTECH",
         "index_name": "恒生科技",
         "target_return": [20, 30, 50],
         "target_sell_pct": [30, 30, 40],
@@ -112,24 +112,31 @@ def fetch_index_pe(index_code, fallback_lg=None):
         if index_code in ("000510",):
             df = ak.stock_zh_index_value_csindex(symbol=index_code)
             col = "市盈率1"
+            source_type = "pe"
+        elif index_code == "HSTECH":
+            df = ak.stock_hk_index_daily_sina(symbol=index_code)
+            col = "close"
+            source_type = "price"
         elif fallback_lg:
             df = ak.stock_index_pe_lg(symbol=fallback_lg)
             col = "滚动市盈率"
+            source_type = "pe"
         else:
             return None
 
-        pe1 = df[col].dropna()
-        latest_pe = pe1.iloc[-1]
-        percentile = round((pe1 < latest_pe).sum() / len(pe1) * 100, 1)
+        vals = df[col].dropna()
+        latest_val = vals.iloc[-1]
+        percentile = round((vals < latest_val).sum() / len(vals) * 100, 1)
         return {
-            "latest_pe": latest_pe,
+            "latest_pe": latest_val,
             "percentile": percentile,
-            "pe_20": round(pe1.quantile(0.2), 2),
-            "pe_40": round(pe1.quantile(0.4), 2),
-            "pe_60": round(pe1.quantile(0.6), 2),
-            "pe_80": round(pe1.quantile(0.8), 2),
-            "pe_85": round(pe1.quantile(0.85), 2),
-            "pe_95": round(pe1.quantile(0.95), 2),
+            "source_type": source_type,
+            "pe_20": round(vals.quantile(0.2), 2),
+            "pe_40": round(vals.quantile(0.4), 2),
+            "pe_60": round(vals.quantile(0.6), 2),
+            "pe_80": round(vals.quantile(0.8), 2),
+            "pe_85": round(vals.quantile(0.85), 2),
+            "pe_95": round(vals.quantile(0.95), 2),
         }
     except Exception as e:
         print(f"  获取指数PE失败 {index_code}: {e}")
@@ -269,12 +276,13 @@ def generate_html(funds_data, nav_date):
 
         # PE估值卡片
         if pe:
+            pe_label = "PE" if pe.get("source_type") == "pe" else "点位"
             pe_pct_color = red if pe["percentile"] >= 80 else (blue if pe["percentile"] < 40 else "#666")
             section += f"""
 <div style="{card}">
 <div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">📊 {cfg.get('index_name','指数')} 估值{pe_note}</div>
-<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">当前PE</span><span style="font-weight:600">{pe['latest_pe']:.2f}</span></div>
-<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">PE百分位</span><span style="color:{pe_pct_color};font-weight:600">{pe['percentile']}%</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">当前{pe_label}</span><span style="font-weight:600">{pe['latest_pe']:.2f}</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">{pe_label}百分位</span><span style="color:{pe_pct_color};font-weight:600">{pe['percentile']}%</span></div>
 <div style="background:#f2f2f2;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:12px">
 <div style="display:flex;justify-content:space-between;color:#999">
 <span>20%</span><span>40%</span><span>60%</span><span>80%</span>
@@ -451,7 +459,8 @@ def main():
         if index_code:
             pe_info = fetch_index_pe(index_code, cfg.get("pe_fallback_lg"))
             if pe_info:
-                print(f"    PE: {pe_info['latest_pe']:.2f} (百分位 {pe_info['percentile']}%)")
+                label = "PE" if pe_info.get("source_type") == "pe" else "点位"
+                print(f"    {label}: {pe_info['latest_pe']:.2f} (百分位 {pe_info['percentile']}%)")
 
         status = check_take_profit(purchases_matched, nav, pe_info, cfg)
         print(f"    总投入: ¥{status['total_cost']:,.0f}")
