@@ -78,7 +78,7 @@ def fetch_latest_nav(fund_code):
 # PushPlus 推送
 # ============================================================
 
-def push_to_wechat(title, content, token, template="txt"):
+def push_to_wechat(title, content, token, template="html"):
     if not token:
         print("   WARNING: PUSHPLUS_TOKEN not configured")
         return
@@ -162,7 +162,6 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
 
     has_alert = bool(t_status["triggered_tp"]) or t_status["sl_triggered"] or bool(new_triggered)
 
-    # ---- 标题 ----
     title = "012805"
     if t_status["triggered_tp"]:
         title += " 止盈"
@@ -171,106 +170,117 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
     if t_status["sl_triggered"]:
         title += " 止损"
 
-    L = "━━━━━━━━━━━━━━"
+    css = """font-family:-apple-system,'PingFang SC',sans-serif;max-width:100%;color:#222;font-size:14px;line-height:1.6"""
+    card = """background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.06)"""
+    up = "#e53e3e"
+    dn = "#38a169"
 
-    lines = []
-    # ========== 头部 ==========
-    lines.append(L)
-    lines.append(f"  012805 每日监控")
-    lines.append(f"  {date}  |  净值 {nav:.4f}")
-    lines.append(L)
+    def color(v):
+        return up if v >= 0 else dn
 
-    # ========== 整体持仓（前置） ==========
-    lines.append(f"")
-    lines.append(f"💰 整体持仓")
-    lines.append(f"  市值 ¥{overall_market:,.0f}  盈亏 {overall_pnl_pct:+.1f}%")
-    lines.append(f"  投入 ¥{POSITION_COST:,.0f}  浮动 ¥{overall_pnl:+,.0f}")
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="{css};background:#f0f0f0;padding:12px;margin:0">
 
-    # ========== T仓概要 ==========
-    lines.append(f"")
-    lines.append(f"📌 T仓 | 成本 ¥{T_COST:,.0f}  均价 ¥{T_ENTRY_NAV:.4f}")
-    lines.append(f"  市值 ¥{t_status['t_market']:,.0f}  盈亏 {t_status['t_pnl_pct']:+.1f}%")
+<div style="background:#1a1a2e;color:#fff;padding:16px;border-radius:12px;text-align:center;margin-bottom:10px">
+<div style="font-size:12px;opacity:0.7">{date}</div>
+<div style="font-size:12px;opacity:0.6;margin-top:4px">净值</div>
+<div style="font-size:26px;font-weight:700;margin:2px 0">{nav:.4f}</div>
+<div style="font-size:12px">012805 每日监控</div>
+</div>
 
-    # ========== 触发动作（高亮） ==========
-    lines.append(f"")
-    lines.append(L)
+<div style="{card}">
+<div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">💰 整体持仓</div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">市值</span><span>¥{overall_market:,.0f}</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">盈亏</span><span style="color:{color(overall_pnl_pct)};font-weight:600">{overall_pnl_pct:+.1f}%</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">总投入</span><span>¥{POSITION_COST:,.0f}</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">浮动</span><span style="color:{color(overall_pnl)};font-weight:600">¥{overall_pnl:+,.0f}</span></div>
+</div>
 
+<div style="{card}">
+<div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">📌 T仓 · 成本 ¥{T_COST:,.0f}</div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">均价</span><span>{T_ENTRY_NAV:.4f}</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">市值</span><span>¥{t_status['t_market']:,.0f}</span></div>
+<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#999">盈亏</span><span style="color:{color(t_status['t_pnl_pct'])};font-weight:600">{t_status['t_pnl_pct']:+.1f}%</span></div>
+</div>
+"""
+
+    # Alert section
     if has_alert:
         for tp in t_status["triggered_tp"]:
             proceeds = tp["sell_shares"] * nav
-            lines.append(f"")
-            lines.append(f"🟢 止盈触发 +{tp['pct']}%")
-            lines.append(f"")
-            lines.append(f"  >>> 卖出 {tp['sell_shares']:,} 份 ({tp['sell_pct']}%)")
-            lines.append(f"  >>> 回款约 ¥{proceeds:,.0f}")
-            lines.append(f"")
-
+            html += f"""
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🟢 止盈触发 +{tp['pct']}%</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 卖出 {tp['sell_shares']:,} 份（{tp['sell_pct']}%）</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 回款约 ¥{proceeds:,.0f}</div>
+</div>"""
         if t_status["sl_triggered"]:
-            lines.append(f"")
-            lines.append(f"🔴 止损触发 -8%")
-            lines.append(f"")
-            lines.append(f"  >>> 全出 {T_SHARES:,} 份")
-            lines.append(f"  >>> 回收约 ¥{T_SHARES * nav:,.0f}")
-            lines.append(f"")
-
+            html += f"""
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🔴 止损触发 -8%</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 全出 {T_SHARES:,} 份</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 回收约 ¥{T_SHARES * nav:,.0f}</div>
+</div>"""
         for entry in new_triggered:
             cost = entry["shares"] * nav
-            lines.append(f"")
-            lines.append(f"🟢 开仓触发 {entry['pct']:+.0f}% @ ¥{entry['nav']:.4f}")
-            lines.append(f"")
-            lines.append(f"  >>> 买入 {entry['shares']:,} 份")
-            lines.append(f"  >>> 需资金约 ¥{cost:,.0f}")
-            lines.append(f"")
-
+            html += f"""
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🟢 开仓触发 {entry['pct']:+.0f}%</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 买入 {entry['shares']:,} 份 @ {entry['nav']:.4f}</div>
+<div style="font-size:14px;font-weight:600;padding:2px 0">→ 需资金约 ¥{cost:,.0f}</div>
+</div>"""
     else:
-        lines.append(f"")
-        lines.append(f"  ⏳ 持仓观望，无触发")
-        lines.append(f"")
-
-        # 最近的下一个操作点
         upcoming = []
         for tp in t_status["tp_levels"]:
             if not tp["triggered"]:
-                upcoming.append(("止盈", tp["nav"], f"+{tp['pct']}%", f"卖 {tp['sell_pct']}%"))
+                upcoming.append(("止盈", tp["nav"], f"+{tp['pct']}% 卖 {tp['sell_pct']}%"))
         for entry in new_pending:
-            upcoming.append(("开仓", entry["nav"], f"{entry['pct']:+.0f}%", f"买 {entry['shares']:,}份"))
+            upcoming.append(("开仓", entry["nav"], f"{entry['pct']:+.0f}% 买 {entry['shares']:,}份"))
+        upcoming.sort(key=lambda x: abs(x[1] - nav))
+        n = upcoming[0] if upcoming else ("—", 0, "")
+        gap = abs(n[1] - nav)
 
-        if upcoming:
-            upcoming.sort(key=lambda x: abs(x[1] - nav))
-            n = upcoming[0]
-            gap = abs(n[1] - nav)
-            lines.append(f"  下一步 {n[0]} {n[2]} @ ¥{n[1]:.4f}")
-            lines.append(f"  距当前 ¥{gap:.4f}")
+        html += f"""
+<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;text-align:center">
+<div style="color:#788;font-size:14px">⏳ 持仓观望，无触发</div>
+<div style="color:#555;font-size:13px;margin-top:4px">下一步 {n[0]} {n[2]} @ {n[1]:.4f}（差 {gap:.4f}）</div>
+</div>"""
 
-    lines.append(L)
-
-    # ========== T仓价位明细 ==========
-    lines.append(f"")
-    lines.append(f"T仓止盈/止损")
+    # T仓价位
+    html += f"""
+<div style="{card}">
+<div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">T仓止盈/止损</div>"""
     for tp in t_status["tp_levels"]:
         gap = abs(tp["nav"] - nav)
         if tp["triggered"]:
-            lines.append(f"  ✅ +{tp['pct']}% ¥{tp['nav']:.4f}  卖{tp['sell_pct']}%  >> 已触发")
+            tag = '<span style="background:#c6f6d5;color:#276749;font-size:11px;padding:1px 5px;border-radius:3px">已触发</span>'
         else:
-            lines.append(f"  ·  +{tp['pct']}% ¥{tp['nav']:.4f}  卖{tp['sell_pct']}%  差¥{gap:.4f}")
+            tag = f'<span style="color:#aaa;font-size:12px">差{gap:.4f}</span>'
+        html += f'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f2f2f2;font-size:13px"><span>+{tp["pct"]}% {tp["nav"]:.4f} 卖{tp["sell_pct"]}%</span>{tag}</div>'
 
     sl_gap = nav - t_status["sl_nav"]
     if t_status["sl_triggered"]:
-        lines.append(f"  🔴 -8% ¥{t_status['sl_nav']:.4f}  全出  >> 已触发")
+        sl_tag = '<span style="background:#fed7d7;color:#9b2c2c;font-size:11px;padding:1px 5px;border-radius:3px">已触发</span>'
     else:
-        lines.append(f"  ·  -8% ¥{t_status['sl_nav']:.4f}  全出  距离¥{sl_gap:.4f}")
+        sl_tag = f'<span style="color:#aaa;font-size:12px">距离{sl_gap:.4f}</span>'
+    html += f'<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>-8% {t_status["sl_nav"]:.4f} 全出</span>{sl_tag}</div>'
+    html += '</div>'
 
-    lines.append(f"")
-    lines.append(f"新开T仓点位")
+    # 新T入场
+    html += f"""
+<div style="{card}">
+<div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">新开T仓点位</div>"""
     for entry in NEW_T_ENTRIES:
         gap = (entry["nav"] / nav - 1) * 100
         if nav <= entry["nav"]:
-            lines.append(f"  🟢 ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%)  {entry['shares']:,}份  已触发")
+            tag = '<span style="background:#c6f6d5;color:#276749;font-size:11px;padding:1px 5px;border-radius:3px">已触发</span>'
         else:
-            lines.append(f"  ·  ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%)  {entry['shares']:,}份  距{gap:+.1f}%")
+            tag = f'<span style="color:#aaa;font-size:12px">距{gap:+.1f}%</span>'
+        html += f'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f2f2f2;font-size:13px"><span>{entry["nav"]:.4f} ({entry["pct"]:+.0f}%) {entry["shares"]:,}份</span>{tag}</div>'
+    html += '</div>'
 
-    content = "\n".join(lines)
-    return title, content
+    html += '</body></html>'
+    return title, html
 
 
 # ============================================================
