@@ -163,7 +163,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
 
     has_alert = bool(t_status["triggered_tp"]) or t_status["sl_triggered"] or bool(new_triggered)
 
-    title = "恒生科技"
+    title = f"恒生科技 {FUND_CODE}"
     if t_status["triggered_tp"]:
         title += " 止盈"
     if new_triggered:
@@ -186,7 +186,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
 <div style="font-size:12px;opacity:0.7">{date}</div>
 <div style="font-size:12px;opacity:0.6;margin-top:4px">净值</div>
 <div style="font-size:26px;font-weight:700;margin:2px 0">{nav:.4f}</div>
-<div style="font-size:12px">{FUND_NAME}</div>
+<div style="font-size:12px">{FUND_NAME}（{FUND_CODE}）</div>
 </div>
 
 <div style="{card}">
