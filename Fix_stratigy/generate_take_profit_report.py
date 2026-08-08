@@ -330,47 +330,49 @@ def generate_html(funds_data, nav_date):
 
     # 止盈策略说明
     strategy_html = f"""
-<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border-radius:12px;padding:18px 16px;margin-bottom:10px">
-<div style="font-size:18px;font-weight:600;text-align:center;margin:0 0 12px 0">📊 宽基智能定投 · 买卖策略</div>
+<div style="border-top:2px dashed #d0d0d0;margin:14px 0 8px"></div>
 
-<div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px">
-<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#90b4f0">📈 买入三原则</div>
+<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.06)">
+<div style="font-size:15px;font-weight:600;color:#2b4c7e;text-align:center;margin:0 0 12px 0">📋 附录 · 策略说明</div>
 
-<div style="font-size:12px;color:#ccc;line-height:1.7;margin-bottom:10px">
-<b style="color:#fdaf6b">原则一 · PE百分位定方向</b><br>
+<div style="margin-bottom:10px">
+<div style="font-size:13px;font-weight:600;color:#2b6cb0;margin-bottom:6px">📈 买入三原则</div>
+
+<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
+<b style="color:#dd6b20">原则一 · PE百分位定方向</b><br>
 PE &lt; 60% → 正常定投 | PE 60%~80% → 减半定投 | PE &gt; 80% → 暂停定投
 </div>
 
-<div style="font-size:12px;color:#ccc;line-height:1.7;margin-bottom:10px">
-<b style="color:#fdaf6b">原则二 · 净值回调抓节奏</b><br>
+<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
+<b style="color:#dd6b20">原则二 · 净值回调抓节奏</b><br>
 持仓净值每跌 <b>5%</b> 追加 1 份（约 ¥5,000）；再跌 <b>10%</b> 追加 2 份
 </div>
 
-<div style="font-size:12px;color:#ccc;line-height:1.7">
-<b style="color:#fdaf6b">原则三 · 低估区加倍</b><br>
+<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:10px">
+<b style="color:#dd6b20">原则三 · 低估区加倍</b><br>
 PE &lt; 40% 时，每期定投金额 × 1.5；PE &lt; 20% 时 × 2.0
 </div>
 </div>
 
-<div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px">
-<div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#fc8181">🔔 卖出双信号（谁先触发按谁执行）</div>
+<div>
+<div style="font-size:13px;font-weight:600;color:#c53030;margin-bottom:6px">🔔 卖出双信号（谁先触发按谁执行）</div>
 
-<div style="margin-bottom:8px">
-<div style="font-size:12px;font-weight:600;color:#fdaf6b;margin-bottom:3px">信号一 · 目标收益止盈</div>
-<table style="width:100%;border-collapse:collapse;font-size:12px">
-<tr style="color:#ccc;border-bottom:1px solid rgba(255,255,255,0.1)"><td>累计收益率</td><td style="text-align:center">操作</td></tr>
-<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td>≥ 20%</td><td style="text-align:center;color:#fc8181">卖出 30%</td></tr>
-<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td>≥ 30%</td><td style="text-align:center;color:#fc8181">再卖 30%</td></tr>
-<tr><td>≥ 50%</td><td style="text-align:center;color:#fc8181">清仓</td></tr>
+<div style="margin-bottom:6px">
+<div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号一 · 目标收益止盈</div>
+<table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
+<tr style="border-bottom:1px solid #eee"><td>累计收益率</td><td style="text-align:center;color:#999">操作</td></tr>
+<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 20%</td><td style="text-align:center;color:#c53030">卖出 30%</td></tr>
+<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 30%</td><td style="text-align:center;color:#c53030">再卖 30%</td></tr>
+<tr><td>≥ 50%</td><td style="text-align:center;color:#c53030">清仓</td></tr>
 </table>
 </div>
 
 <div>
-<div style="font-size:12px;font-weight:600;color:#fdaf6b;margin-bottom:3px">信号二 · 估值止盈（PE百分位）</div>
-<table style="width:100%;border-collapse:collapse;font-size:12px">
-<tr style="color:#ccc;border-bottom:1px solid rgba(255,255,255,0.1)"><td>PE百分位</td><td style="text-align:center">操作</td></tr>
-<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td>≥ 85%</td><td style="text-align:center;color:#fc8181">卖出 50%</td></tr>
-<tr><td>≥ 95%</td><td style="text-align:center;color:#fc8181">清仓</td></tr>
+<div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号二 · 估值止盈（PE/点位百分位）</div>
+<table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
+<tr style="border-bottom:1px solid #eee"><td>PE百分位</td><td style="text-align:center;color:#999">操作</td></tr>
+<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 85%</td><td style="text-align:center;color:#c53030">卖出 50%</td></tr>
+<tr><td>≥ 95%</td><td style="text-align:center;color:#c53030">清仓</td></tr>
 </table>
 </div>
 </div>
@@ -388,14 +390,14 @@ PE &lt; 40% 时，每期定投金额 × 1.5；PE &lt; 20% 时 × 2.0
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>定投止盈信息</title></head>
 <body style="{css};background:#f0f0f0;padding:12px;margin:0">
 
-{strategy_html}
-
 <div style="background:#1a1a2e;color:#fff;padding:12px 16px;border-radius:12px;text-align:center;margin-bottom:10px">
 <div style="font-size:16px;font-weight:600;margin:0">{title}{signals_badge}</div>
 <div style="font-size:11px;opacity:0.5;margin:4px 0 0">{nav_date} 更新</div>
 </div>
 
 {'<div style="border-top:2px dashed #d0d0d0;margin:14px 0 8px"></div>'.join(fund_sections)}
+
+{strategy_html}
 
 <div style="text-align:center;color:#aaa;font-size:11px;margin-top:12px">数据来源: 东方财富 · 中证指数 | 仅供参考 · 不构成投资建议</div>
 </body></html>"""
