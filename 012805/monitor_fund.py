@@ -35,6 +35,7 @@ NEW_T_ENTRIES = [
 ]
 
 FUND_CODE = "012805"
+FUND_NAME = "广发恒生科技ETF联接C"
 
 
 # ============================================================
@@ -162,7 +163,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
 
     has_alert = bool(t_status["triggered_tp"]) or t_status["sl_triggered"] or bool(new_triggered)
 
-    title = "012805"
+    title = "恒生科技"
     if t_status["triggered_tp"]:
         title += " 止盈"
     if new_triggered:
@@ -185,7 +186,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
 <div style="font-size:12px;opacity:0.7">{date}</div>
 <div style="font-size:12px;opacity:0.6;margin-top:4px">净值</div>
 <div style="font-size:26px;font-weight:700;margin:2px 0">{nav:.4f}</div>
-<div style="font-size:12px">012805 每日监控</div>
+<div style="font-size:12px">{FUND_NAME}</div>
 </div>
 
 <div style="{card}">
@@ -293,7 +294,7 @@ def main(pushplus_token=None):
         pushplus_token = os.environ.get("PUSHPLUS_TOKEN")
 
     print("=" * 60)
-    print(f"  012805 净值监控 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  {FUND_NAME} 净值监控 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     nav, date = fetch_latest_nav(FUND_CODE)
