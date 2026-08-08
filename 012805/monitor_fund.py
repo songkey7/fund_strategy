@@ -78,7 +78,7 @@ def fetch_latest_nav(fund_code):
 # PushPlus 推送
 # ============================================================
 
-def push_to_wechat(title, content, token, template="markdown"):
+def push_to_wechat(title, content, token, template="txt"):
     if not token:
         print("   WARNING: PUSHPLUS_TOKEN not configured")
         return
@@ -153,7 +153,6 @@ def new_t_entry_status(nav):
 # ============================================================
 
 def generate_report(nav, date, t_status, new_triggered, new_pending):
-    # 基于用户确认数据：净值 ¥0.7761 时市值 ¥65,454.42
     CONFIRMED_MARKET_AT_BASE = 65454.42
     total_shares = CONFIRMED_MARKET_AT_BASE / BASE_NAV
 
@@ -161,80 +160,115 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
     overall_pnl = overall_market - POSITION_COST
     overall_pnl_pct = (overall_pnl / POSITION_COST) * 100
 
-    # ---- 标题 ----
     has_alert = bool(t_status["triggered_tp"]) or t_status["sl_triggered"] or bool(new_triggered)
+
+    # ---- 标题 ----
     title = "012805"
     if t_status["triggered_tp"]:
-        title += " 🟢止盈"
-    if t_status["sl_triggered"]:
-        title += " 🔴止损"
+        title += " 止盈"
     if new_triggered:
-        title += " 🟢开仓"
+        title += " 开仓"
+    if t_status["sl_triggered"]:
+        title += " 止损"
 
     # ---- 正文 ----
-    content = f"""## 📊 012805 净值监控
+    lines = []
+    lines.append(f"012805 ¥{nav:.4f} | T仓 {t_status['t_pnl_pct']:+.1f}%")
+    lines.append(f"")
 
-**数据日期**: {date}
-**当前净值**: ¥{nav:.4f}
+    # ==== 触发动作（前置高亮）====
+    if has_alert:
+        lines.append(f"⚡ 立即操作")
+        lines.append(f"━━━━━━━━━━")
 
----
+        for tp in t_status["triggered_tp"]:
+            proceeds = tp["sell_shares"] * nav
+            lines.append(f"")
+            lines.append(f"🟢 +{tp['pct']}% 止盈触发 ¥{tp['nav']:.4f}")
+            lines.append(f"   卖出 {tp['sell_shares']:,} 份 ({tp['sell_pct']}%)")
+            lines.append(f"   回款约 ¥{proceeds:,.0f}")
 
-### 💰 整体持仓
+        if t_status["sl_triggered"]:
+            lines.append(f"")
+            lines.append(f"🔴 -8% 止损触发 ¥{t_status['sl_nav']:.4f}")
+            lines.append(f"   全出 {T_SHARES:,} 份")
 
-| 项目 | 数值 |
-|------|------|
-| 总投入 | ¥{POSITION_COST:,.2f} |
-| 市值 | ¥{overall_market:,.2f} |
-| 盈亏 | ¥{overall_pnl:+,.0f} ({overall_pnl_pct:+.2f}%) |
-
----
-
-### 📌 当前 T 仓（成本 ¥{T_COST:,.0f}，均价 ¥{T_ENTRY_NAV:.4f}，{T_SHARES:,} 份）
-
-| 项目 | 数值 |
-|------|------|
-| T仓市值 | ¥{t_status['t_market']:,.0f} |
-| T仓盈亏 | {t_status['t_pnl_pct']:+.1f}% |
-
-"""
-
-    # T 仓止盈
-    content += "**止盈位：**\n"
-    for tp in t_status["tp_levels"]:
-        icon = "✅" if tp["triggered"] else "⏳"
-        gap = abs(tp["nav"] - nav)
-        content += f"- {icon} +{tp['pct']}% → ¥{tp['nav']:.4f} → 卖 {tp['sell_pct']}%（{tp['sell_shares']:,} 份）"
-        if tp["triggered"]:
-            content += f" ⚡已触发"
-        else:
-            content += f" 差 ¥{gap:.4f}"
-        content += "\n"
-
-    # T 仓止损
-    sl_icon = "🔴" if t_status["sl_triggered"] else "⏳"
-    sl_gap = nav - t_status["sl_nav"]
-    content += f"\n**止损位：**\n- {sl_icon} -8% → ¥{t_status['sl_nav']:.4f} → 全出（{T_SHARES:,} 份）"
-    if t_status["sl_triggered"]:
-        content += " ⚡已触发"
-    else:
-        content += f" 距离 ¥{sl_gap:.4f}"
-    content += "\n"
-
-    # 新开 T 仓
-    content += f"\n---\n\n### 🎯 新开 T 仓点位\n\n"
-    if new_triggered:
-        content += "**⚠️ 已触发入场：**\n"
         for entry in new_triggered:
-            content += f"- 🟢 ¥{entry['nav']:.4f}（{entry['pct']:+.0f}%）→ 买入 {entry['shares']:,} 份 | {entry['label']}\n"
-        content += "\n"
+            cost = entry["shares"] * nav
+            lines.append(f"")
+            lines.append(f"🟢 新T入场 ¥{entry['nav']:.4f}（{entry['pct']:+.0f}%）")
+            lines.append(f"   买入 {entry['shares']:,} 份")
+            lines.append(f"   需资金约 ¥{cost:,.0f}")
 
-    if new_pending:
-        content += "**等待触发：**\n"
-        for entry in new_pending:
-            content += f"- ¥{entry['nav']:.4f}（{entry['pct']:+.0f}%）→ {entry['shares']:,} 份 | 距当前 {entry['gap_pct']:+.1f}%\n"
+    else:
+        lines.append(f"⏳ 持仓观望")
+        lines.append(f"━━━━━━━━━━")
+        lines.append(f"无触发点位")
+        lines.append(f"")
 
-    content += f"\n---\n> 012805 智能监控 | {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        # 下一步：最近的操作点
+        # Find the closest upcoming action
+        upcoming = []
+        for tp in t_status["tp_levels"]:
+            if not tp["triggered"]:
+                upcoming.append(("止盈", tp["nav"], f"+{tp['pct']}% 卖 {tp['sell_pct']}%"))
+        if not t_status["sl_triggered"]:
+            # Only add if very close (within 15%)
+            sl_dist = (nav - t_status["sl_nav"]) / nav * 100
+            if sl_dist < 20:
+                upcoming.append(("止损", t_status["sl_nav"], "全出"))
 
+        for entry in new_pending[:2]:  # show closest 2
+            upcoming.append(("开仓", entry["nav"], f"买 {entry['shares']:,} 份"))
+
+        if upcoming:
+            upcoming.sort(key=lambda x: abs(x[1] - nav))
+            next_action = upcoming[0]
+            gap = abs(next_action[1] - nav)
+            lines.append(f"下一步: {next_action[0]} ¥{next_action[1]:.4f} {next_action[2]}")
+            lines.append(f"距当前 ¥{gap:.4f}")
+
+    # ==== T仓详情 ====
+    lines.append(f"")
+    lines.append(f"📌 T仓止盈位")
+    lines.append(f"━━━━━━━━━━")
+    for tp in t_status["tp_levels"]:
+        icon = "✅" if tp["triggered"] else "  "
+        gap = abs(tp["nav"] - nav)
+        if tp["triggered"]:
+            lines.append(f"{icon} +{tp['pct']}% ¥{tp['nav']:.4f} 卖{tp['sell_pct']}% ⚡已触发")
+        else:
+            lines.append(f"{icon} +{tp['pct']}% ¥{tp['nav']:.4f} 卖{tp['sell_pct']}% 差¥{gap:.4f}")
+
+    lines.append(f"")
+    lines.append(f"📌 T仓止损")
+    lines.append(f"━━━━━━━━━━")
+    sl_gap = nav - t_status["sl_nav"]
+    if t_status["sl_triggered"]:
+        lines.append(f"🔴 -8% ¥{t_status['sl_nav']:.4f} 全出 ⚡已触发")
+    else:
+        lines.append(f"   -8% ¥{t_status['sl_nav']:.4f} 全出 距离¥{sl_gap:.4f}")
+
+    # ==== 新T入场 ====
+    lines.append(f"")
+    lines.append(f"📌 新开T仓")
+    lines.append(f"━━━━━━━━━━")
+    for entry in NEW_T_ENTRIES:
+        icon = "🟢" if nav <= entry["nav"] else "  "
+        gap = (entry["nav"] / nav - 1) * 100
+        if nav <= entry["nav"]:
+            lines.append(f"{icon} ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%) 买{entry['shares']:,}份 ⚡触发")
+        else:
+            lines.append(f"{icon} ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%) 买{entry['shares']:,}份 距{gap:+.1f}%")
+
+    # ==== 整体持仓 ====
+    lines.append(f"")
+    lines.append(f"💰 整体持仓")
+    lines.append(f"━━━━━━━━━━")
+    lines.append(f"净值 ¥{nav:.4f} | 市值 ¥{overall_market:,.0f}")
+    lines.append(f"总投入 ¥{POSITION_COST:,.0f} | 亏损 ¥{overall_pnl:+,.0f} ({overall_pnl_pct:+.1f}%)")
+
+    content = "\n".join(lines)
     return title, content
 
 
