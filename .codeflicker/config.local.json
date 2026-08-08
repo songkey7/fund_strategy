@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Fetch(domain:fund.eastmoney.com)",
+      "Fetch(domain:fundf10.eastmoney.com)"
+    ]
+  }
+}
