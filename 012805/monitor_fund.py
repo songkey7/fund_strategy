@@ -182,11 +182,11 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="{css};background:#f0f0f0;padding:12px;margin:0">
 
-<div style="background:#1a1a2e;color:#fff;padding:16px;border-radius:12px;text-align:center;margin-bottom:10px">
-<div style="font-size:12px;opacity:0.7">{date}</div>
-<div style="font-size:12px;opacity:0.6;margin-top:4px">净值</div>
-<div style="font-size:26px;font-weight:700;margin:2px 0">{nav:.4f}</div>
-<div style="font-size:12px">{FUND_NAME}（{FUND_CODE}）</div>
+<div style="background:#1a1a2e;color:#fff;padding:18px 16px;border-radius:12px;text-align:center;margin-bottom:10px">
+<div style="font-size:18px;font-weight:600;margin:0">{FUND_NAME}</div>
+<div style="font-size:11px;opacity:0.5;margin:2px 0">{FUND_CODE}</div>
+<div style="font-size:15px;font-weight:600;margin:8px 0 0">净值 {nav:.4f}</div>
+<div style="font-size:10px;opacity:0.6;margin:4px 0 0">{date}</div>
 </div>
 
 <div style="{card}">
@@ -210,14 +210,14 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
         for tp in t_status["triggered_tp"]:
             proceeds = tp["sell_shares"] * nav
             html += f"""
-<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px;text-align:center">
 <div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🟢 止盈触发 +{tp['pct']}%</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 卖出 {tp['sell_shares']:,} 份（{tp['sell_pct']}%）</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 回款约 ¥{proceeds:,.0f}</div>
 </div>"""
         if t_status["sl_triggered"]:
             html += f"""
-<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px;text-align:center">
 <div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🔴 止损触发 -8%</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 全出 {T_SHARES:,} 份</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 回收约 ¥{T_SHARES * nav:,.0f}</div>
@@ -225,7 +225,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
         for entry in new_triggered:
             cost = entry["shares"] * nav
             html += f"""
-<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px">
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px;margin-bottom:8px;text-align:center">
 <div style="font-size:15px;font-weight:700;color:#c53030;margin-bottom:6px">🟢 开仓触发 {entry['pct']:+.0f}%</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 买入 {entry['shares']:,} 份 @ {entry['nav']:.4f}</div>
 <div style="font-size:14px;font-weight:600;padding:2px 0">→ 需资金约 ¥{cost:,.0f}</div>
@@ -242,9 +242,10 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
         gap = abs(n[1] - nav)
 
         html += f"""
-<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;text-align:center">
-<div style="color:#788;font-size:14px">⏳ 持仓观望，无触发</div>
-<div style="color:#555;font-size:13px;margin-top:4px">下一步 {n[0]} {n[2]} @ {n[1]:.4f}（差 {gap:.4f}）</div>
+<div style="background:#edf2ff;border:1px solid #90b4f0;border-radius:10px;padding:14px;margin-bottom:8px;text-align:center">
+<div style="color:#4a5568;font-size:14px;font-weight:600">⏳ 持仓观望，无触发</div>
+<div style="color:#2b6cb0;font-size:14px;font-weight:600;margin-top:6px">下一步 {n[0]} {n[2]} @ {n[1]:.4f}</div>
+<div style="color:#4a5568;font-size:12px;margin-top:2px">差 {gap:.4f}</div>
 </div>"""
 
     # T仓价位
