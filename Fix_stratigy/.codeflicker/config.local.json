@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Fetch(domain:fundgz.1234567.com.cn)"
+      "Fetch(domain:fundgz.1234567.com.cn)",
+      "Fetch(domain:fundf10.eastmoney.com)"
     ]
   }
 }

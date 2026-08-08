@@ -32,6 +32,16 @@ FUND_META = {
         "pe_sell_threshold": [85, 95],
         "pe_sell_pct": [50, 50],
     },
+    "013309": {
+        "fund_code": "013309",
+        "fund_name": "易方达恒生科技ETF联接C",
+        "index_code": None,
+        "index_name": "恒生科技",
+        "target_return": [20, 30, 50],
+        "target_sell_pct": [30, 30, 40],
+        "pe_sell_threshold": [85, 95],
+        "pe_sell_pct": [50, 50],
+    },
 }
 
 

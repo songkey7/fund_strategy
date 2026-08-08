@@ -20,6 +20,11 @@ FUND_META = {
         "fund_name": "天弘中证A500ETF联接C",
         "index_code": "000510",
     },
+    "013309": {
+        "fund_code": "013309",
+        "fund_name": "易方达恒生科技ETF联接C",
+        "index_code": None,
+    },
 }
 
 BASE_AMOUNT = 2000
@@ -106,6 +111,12 @@ def generate_html(advices, month_label):
         if a.get("pe_fallback_lg"):
             note = f'<span style="font-size:10px;color:#aaa;font-weight:400"> · {a["pe_fallback_lg"]}近似</span>'
 
+        pe_line = ""
+        if a["pe"] > 0:
+            pe_line = f'<span>PE {a["pe"]:.2f} · 百分位 {a["percentile"]}%{note}</span>'
+        else:
+            pe_line = '<span style="color:#aaa">暂无PE数据 · 默认1.0x</span>'
+
         rows += f"""
 <div style="{card}">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -117,7 +128,7 @@ def generate_html(advices, month_label):
 <span style="color:{status_color}">{multiplier_str} · {a['status']}</span>
 </div>
 <div style="font-size:12px;color:#888;margin-top:4px;display:flex;justify-content:space-between">
-<span>PE {a['pe']:.2f} · 百分位 {a['percentile']}%{note}</span>
+{pe_line}
 </div>
 </div>"""
 
@@ -171,25 +182,40 @@ def main():
     advices = []
     for code, meta in FUND_META.items():
         print(f"\n  [{code}] {meta['fund_name']}")
-        pe_info = fetch_index_pe(meta["index_code"], meta.get("pe_fallback_lg"))
+        index_code = meta.get("index_code")
+        pe_info = None
+        if index_code:
+            pe_info = fetch_index_pe(index_code, meta.get("pe_fallback_lg"))
 
-        if not pe_info:
+        if index_code and not pe_info:
             print(f"    ❌ PE获取失败，跳过")
             continue
 
-        multiplier, status = calc_dca_multiplier(pe_info["percentile"])
+        if pe_info:
+            multiplier, status = calc_dca_multiplier(pe_info["percentile"])
+            pe_str = f"PE: {pe_info['latest_pe']:.2f} · 百分位 {pe_info['percentile']}% · {status}"
+            pe_val = pe_info['latest_pe']
+            pct = pe_info['percentile']
+        else:
+            multiplier = 1.0
+            status = "无估值数据"
+            pe_str = "暂无PE数据（港股QDII）· 默认 1.0x"
+            pe_val = 0
+            pct = 0
         amount = BASE_AMOUNT * multiplier
-        print(f"    PE: {pe_info['latest_pe']:.2f} · 百分位 {pe_info['percentile']}% · {status}")
+        print(f"    {pe_str}")
         print(f"    定投: {multiplier:.1f}x → ¥{amount:,.0f}")
+
+        pe_note = meta.get("pe_fallback_lg", "")
 
         advices.append({
             "fund_code": code,
             "fund_name": meta["fund_name"],
-            "pe": pe_info["latest_pe"],
-            "percentile": pe_info["percentile"],
+            "pe": pe_val,
+            "percentile": pct,
             "multiplier": multiplier,
             "status": status,
-            "pe_fallback_lg": meta.get("pe_fallback_lg"),
+            "pe_fallback_lg": pe_note,
         })
 
     if not advices:
@@ -197,6 +223,12 @@ def main():
         return
 
     html = generate_html(advices, month_label)
+
+    out_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "月度定投建议.html")
+    with open(out_file, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"\n  📄 报告已生成: {out_file}")
+
     token = os.environ.get("PUSHPLUS_TOKEN")
     if token:
         title = f"📊 {month_label} 定投建议"
