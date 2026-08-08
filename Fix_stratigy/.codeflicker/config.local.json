@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Fetch(domain:fundgz.1234567.com.cn)"
+    ]
+  }
+}

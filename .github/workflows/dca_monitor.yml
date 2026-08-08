@@ -1,0 +1,26 @@
+name: DCA Take-Profit Monitor
+
+on:
+  schedule:
+    - cron: "57 8 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests akshare
+
+      - name: Run DCA monitor
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: cd Fix_stratigy && python generate_take_profit_report.py
