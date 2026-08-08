@@ -73,21 +73,30 @@ def fetch_latest_nav(fund_code):
     for attempt in range(3):
         try:
             url = (
-                f"https://fundgz.1234567.com.cn/js/{fund_code}.js"
-                f"?rt={datetime.now().timestamp()}"
+                f"https://api.fund.eastmoney.com/f10/lsjz"
+                f"?callback=jQuery&fundCode={fund_code}&pageIndex=1&pageSize=1"
+                f"&startDate={datetime.now().strftime('%Y-%m-%d')}&endDate={datetime.now().strftime('%Y-%m-%d')}"
             )
-            headers = {"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"}
+            headers = {
+                "Referer": "https://fundf10.eastmoney.com/",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            }
             resp = requests.get(url, headers=headers, timeout=15)
-            text = resp.text
+            text = resp.text.strip()
             import re
-            m = re.search(r'jsonpgz\((.+)\)', text)
+            m = re.match(r'^\w+\((.*)\)$', text, re.DOTALL)
             if m:
                 data = json.loads(m.group(1))
-                nav = float(data["dwjz"])
-                date = data["jzrq"]
+                records = data["Data"]["LSJZList"]
+                if not records:
+                    print(f"  API返回空 [{attempt+1}]")
+                    continue
+                latest = records[0]
+                nav = float(latest["DWJZ"])
+                date = latest["FSRQ"]
                 return nav, date
             else:
-                print(f"未能解析JSON: {text[:200]}")
+                print(f"  未能解析JSON [{attempt+1}]: {text[:200]}")
         except Exception as e:
             print(f"  获取净值失败 attempt {attempt+1}: {e}")
     return None, None
