@@ -70,25 +70,26 @@ ALERT_LEVELS = [
 
 def fetch_latest_nav(fund_code):
     """获取最新的基金净值"""
-    url = (
-        f"https://api.fund.eastmoney.com/f10/lsjz"
-        f"?callback=jQuery&fundCode={fund_code}&pageIndex=1&pageSize=1"
-        f"&startDate=2026-01-01&endDate={datetime.now().strftime('%Y-%m-%d')}"
-    )
-    headers = {"Referer": "https://fundf10.eastmoney.com/"}
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        data = json.loads(resp.text)
-        records = data.get("Data", {}).get("LSJZList", [])
-        if not records:
-            return None, None
-        latest = records[0]
-        nav = float(latest["DWJZ"])
-        date = latest["FSRQ"]
-        return nav, date
-    except Exception as e:
-        print(f"获取净值失败: {e}")
-        return None, None
+    for attempt in range(3):
+        try:
+            url = (
+                f"https://fundgz.1234567.com.cn/js/{fund_code}.js"
+                f"?rt={datetime.now().timestamp()}"
+            )
+            resp = requests.get(url, timeout=15)
+            text = resp.text
+            import re
+            m = re.search(r'jsonpgz\((.+)\)', text)
+            if m:
+                data = json.loads(m.group(1))
+                nav = float(data["dwjz"])
+                date = data["jzrq"]
+                return nav, date
+            else:
+                print(f"未能解析JSON: {text[:100]}")
+        except Exception as e:
+            print(f"  获取净值失败 attempt {attempt+1}: {e}")
+    return None, None
 
 
 # ============================================================
