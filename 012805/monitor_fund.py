@@ -140,7 +140,8 @@ def generate_alert_message(nav, date, triggered):
 """
 
     for lvl in triggered:
-        content += f"- **{lvl['title']}**: {"跌至" if nav <= lvl["nav"] else "靠近"} ¥{lvl['nav']:.4f} ({lvl['pct']:+d}%)\n"
+        direction = "跌至" if nav <= lvl["nav"] else "接近"
+        content += f"- **{lvl['title']}**: {direction} ¥{lvl['nav']:.4f} ({lvl['pct']:+d}%)\n"
 
     content += """
 ---
