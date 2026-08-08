@@ -20,11 +20,6 @@ FUND_META = {
         "fund_name": "天弘中证A500ETF联接C",
         "index_code": "000510",
     },
-    "013309": {
-        "fund_code": "013309",
-        "fund_name": "易方达恒生科技ETF联接C",
-        "index_code": "HSTECH",
-    },
 }
 
 BASE_AMOUNT = 2000
