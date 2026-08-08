@@ -177,7 +177,7 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
     # ========== 头部 ==========
     lines.append(L)
     lines.append(f"  012805 每日监控")
-    lines.append(f"  {date}  |  ¥{nav:.4f}")
+    lines.append(f"  {date}  |  净值 {nav:.4f}")
     lines.append(L)
 
     # ========== 整体持仓（前置） ==========
