@@ -1,37 +1,49 @@
 #!/usr/bin/env python3
 """
-012805 回本分析 — 基于 akshare + 购买记录
+基金回本分析 — 基于 akshare + 购买记录
+用法: python3 recovery_analysis.py [input/012805_pingan]
+      不传参数则分析 input/ 下所有基金
 """
 import akshare as ak
-from datetime import datetime, timedelta
-import sys
+from datetime import datetime
+import sys, os, json, glob
 
-FUND_CODE = "012805"
+INPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input")
 
-# ============================================================
-# 1. 购买记录
-# ============================================================
-def load_purchases(filepath="012805_pingan"):
-    purchases = []
+
+def parse_fund_config(filepath):
     with open(filepath) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split()
-            date_str = parts[0]
-            amount = float(parts[1].lstrip("+"))
+        content = f.read()
+
+    parts = content.split("---", 1)
+    if len(parts) != 2:
+        return None
+
+    try:
+        config = json.loads(parts[0].strip())
+    except json.JSONDecodeError:
+        return None
+
+    purchases = []
+    for line in parts[1].strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        fields = line.split()
+        if len(fields) >= 2:
+            date_str = fields[0]
+            amount = float(fields[1].lstrip("+"))
             date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
             purchases.append((date, amount))
-    return purchases
+
+    config["_purchases"] = purchases
+    config["_filepath"] = filepath
+    return config
 
 
-# ============================================================
-# 2. 获取历史净值
-# ============================================================
-def fetch_nav_history():
-    print("  获取净值历史...")
-    df = ak.fund_open_fund_info_em(symbol=FUND_CODE, indicator="单位净值走势")
+def fetch_nav_history(fund_code):
+    print(f"  获取 {fund_code} 净值历史...")
+    df = ak.fund_open_fund_info_em(symbol=fund_code, indicator="单位净值走势")
     df = df.rename(columns={"净值日期": "date", "单位净值": "nav"})
     df["date"] = df["date"].astype(str)
     df["nav"] = df["nav"].astype(float)
@@ -39,9 +51,6 @@ def fetch_nav_history():
     return nav_map, df
 
 
-# ============================================================
-# 3. 匹配购买日期的净值
-# ============================================================
 def match_nav(purchases, nav_map):
     dates_sorted = sorted(nav_map.keys())
     results = []
@@ -49,7 +58,6 @@ def match_nav(purchases, nav_map):
     total_shares = 0
 
     for purchase_date, amount in purchases:
-        # Find nearest NAV date <= purchase_date
         nav_date = None
         for d in dates_sorted:
             if d <= purchase_date:
@@ -57,7 +65,6 @@ def match_nav(purchases, nav_map):
             else:
                 break
         if nav_date is None:
-            # find the next available
             for d in dates_sorted:
                 if d >= purchase_date:
                     nav_date = d
@@ -83,9 +90,6 @@ def match_nav(purchases, nav_map):
     return results, total_cost, total_shares
 
 
-# ============================================================
-# 4. 计算当前市值和盈亏
-# ============================================================
 def current_status(results, total_cost, total_shares, nav_map, df):
     latest_row = df.iloc[-1]
     latest_nav = latest_row["nav"]
@@ -96,9 +100,6 @@ def current_status(results, total_cost, total_shares, nav_map, df):
     profit_pct = (profit / total_cost) * 100
     avg_cost = total_cost / total_shares
 
-    be_nav = avg_cost
-    be_pct = (be_nav / latest_nav - 1) * 100
-
     return {
         "latest_nav": latest_nav,
         "latest_date": latest_date,
@@ -108,60 +109,36 @@ def current_status(results, total_cost, total_shares, nav_map, df):
         "market_value": market_value,
         "profit": profit,
         "profit_pct": profit_pct,
-        "be_nav": be_nav,
-        "be_pct": be_pct,
+        "be_nav": avg_cost,
+        "be_pct": (avg_cost / latest_nav - 1) * 100,
     }
 
 
-# ============================================================
-# 5. 回本策略分析
-# ============================================================
-def recovery_analysis(status, nav_map):
-    print(f"\n{'='*65}")
-    print("📊 回本策略分析")
-    print(f"{'='*65}")
-
+def recovery_analysis(status):
     nav = status["latest_nav"]
     be = status["be_nav"]
     shares = status["total_shares"]
     loss = -status["profit"]
 
+    print(f"\n{'='*65}")
+    print("📊 回本策略分析")
+    print(f"{'='*65}")
     print(f"\n  当前净值: ¥{nav:.4f}  |  回本目标: ¥{be:.4f}  |  差距: {(be/nav-1)*100:+.1f}%")
     print(f"  持仓亏损: ¥{loss:,.0f}")
 
-    # --- 方案A: 一次性补仓拉低成本 ---
     print(f"\n  {'─'*60}")
     print(f"  方案A: 一次性补仓 — 把均价拉到当前净值")
     print(f"  {'─'*60}")
 
-    # To make avg_cost <= current_nav: (loss + add) <= 0 → add >= loss... no
-    # New avg = (total_cost + add_amount) / (shares + add_amount/nav)
-    # We need new_avg <= nav (so we're in profit at current nav)
-    # (total_cost + X) / (shares + X/nav) <= nav
-    # total_cost + X <= nav * (shares + X/nav)
-    # total_cost + X <= nav * shares + X
-    # total_cost <= nav * shares → this is always false if you're losing
-    # Actually we need new_avg = nav → (total_cost + X) / (shares + X/nav) = nav
-    # total_cost + X = nav * shares + X → total_cost = nav * shares... same issue
-
-    # The correct formula: new_avg = (total_cost + X) / (total_shares + X/nav)
-    # We want new_avg to be some target, say nav (break even)
-    # But total_cost > nav*total_shares (that's why we're losing)
-    # So we can never get new_avg <= nav by adding... interesting
-
-    # Actually: the break-even nav for the NEW combined position is:
-    # new BE nav = (old_cost + add_amount) / (old_shares + add_amount/buy_nav)
-
     add_amounts = [5000, 10000, 20000, 50000, 100000]
-    print(f"  {'追加金额':<12} {'新均价':<10} {'新回本净值':<12} {'距当前':<10}")
-    print(f"  {'─'*50}")
+    print(f"  {'追加金额':<12} {'新均价':<10} {'差距':<10}")
+    print(f"  {'─'*35}")
     for add in add_amounts:
         new_shares = shares + add / nav
         new_avg = (status["total_cost"] + add) / new_shares
         gap = (new_avg / nav - 1) * 100
-        print(f"  ¥{add:>8,.0f}     ¥{new_avg:.4f}    ¥{new_avg:.4f}       {gap:+.1f}%")
+        print(f"  ¥{add:>8,.0f}     ¥{new_avg:.4f}    {gap:+.1f}%")
 
-    # --- 方案B: 定投分批 ---
     print(f"\n  {'─'*60}")
     print(f"  方案B: 每月定投 — 拉低均价所需月数")
     print(f"  {'─'*60}")
@@ -182,7 +159,6 @@ def recovery_analysis(status, nav_map):
                 a18 = new_avg
         print(f"  ¥{monthly:>8,.0f}     ¥{a6:.4f}        ¥{a12:.4f}        ¥{a18:.4f}")
 
-    # --- 方案C: 做T加速 ---
     print(f"\n  {'─'*60}")
     print(f"  方案C: 做T策略 — 每笔T盈利对回本的贡献")
     print(f"  {'─'*60}")
@@ -200,30 +176,23 @@ def recovery_analysis(status, nav_map):
               f"月做{t_per_month}次 → ¥{monthly_profit:,.0f}/月, 约需 {months_to_recover:.0f} 个月回本")
 
 
-# ============================================================
-# MAIN
-# ============================================================
-def main():
-    print("=" * 65)
-    print("  012805 回本分析 | 数据源: akshare")
-    print("=" * 65)
+def analyze_fund(config):
+    fund_code = config["fund_code"]
+    fund_name = config["fund_name"]
+    purchases = config["_purchases"]
 
-    # 加载购买记录
-    purchases = load_purchases()
+    print(f"\n{'='*65}")
+    print(f"  {fund_name}（{fund_code}）回本分析")
+    print(f"{'='*65}")
+
     if not purchases:
         print("❌ 无购买记录")
-        sys.exit(1)
+        return
 
-    # 获取净值
-    nav_map, df = fetch_nav_history()
-
-    # 匹配净值
+    nav_map, df = fetch_nav_history(fund_code)
     results, total_cost, total_shares = match_nav(purchases, nav_map)
-
-    # 当前状态
     status = current_status(results, total_cost, total_shares, nav_map, df)
 
-    # 打印持仓明细
     print(f"\n{'─'*65}")
     print("📋 持仓明细")
     print(f"{'─'*65}")
@@ -243,8 +212,33 @@ def main():
     print(f"  持仓盈亏:      ¥{status['profit']:+,.2f} ({status['profit_pct']:+.2f}%)")
     print(f"  距回本还差:    {(status['be_nav']/status['latest_nav']-1)*100:+.1f}% 涨幅")
 
-    # 回本策略
-    recovery_analysis(status, nav_map)
+    recovery_analysis(status)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="基金回本分析")
+    parser.add_argument("fund_file", nargs="?", help="基金配置文件路径（可选，默认分析 input/ 下所有）")
+    args = parser.parse_args()
+
+    if args.fund_file:
+        config = parse_fund_config(args.fund_file)
+        if config:
+            analyze_fund(config)
+        else:
+            print(f"❌ 无效的配置文件: {args.fund_file}")
+    else:
+        fund_files = sorted(glob.glob(os.path.join(INPUT_DIR, "*")))
+        fund_files = [f for f in fund_files if os.path.isfile(f) and not os.path.basename(f).startswith(".")]
+        if not fund_files:
+            print(f"❌ input/ 目录下无基金配置文件")
+            return
+
+        print(f"发现 {len(fund_files)} 个基金配置")
+        for fp in fund_files:
+            config = parse_fund_config(fp)
+            if config:
+                analyze_fund(config)
 
     print(f"\n{'='*65}")
     print("  分析完成")

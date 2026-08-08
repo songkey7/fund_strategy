@@ -1,10 +1,8 @@
-name: 012805 Fund Monitor
+name: Multi Fund T-Strategy Monitor
 
 on:
   schedule:
-    # UTC 凌晨 12:00 (北京时间 20:00), 每天净值日更 📰
     - cron: "0 12 * * 1-5"
-  # Manual trigger support
   workflow_dispatch:
 
 jobs:
@@ -25,4 +23,4 @@ jobs:
       - name: Run monitor
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        run: cd 012805 && python monitor_fund.py
+        run: cd T_strategy && python monitor_fund.py
