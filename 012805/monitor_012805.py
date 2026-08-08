@@ -6,54 +6,46 @@
 使用方式: python3 monitor_012805.py
 """
 
-import requests, json, time, subprocess, os, ssl
+import requests, json, time, subprocess, os, ssl, re
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ============================================================
-# 配置参数
+# 整体持仓
 # ============================================================
-FUND_CODE = "012805"
-
-# 关键价位表 (净值 ¥0.7761)
-# 触发买入的价位: 累计跌 2%, 3%, 5%
-# 触发卖出的价位: 涨 3%, 5%, 8%
-# 止损价位: 跌 8%
-BASE_NAV = 0.7761
-CHECK_INTERVAL = 1800  # 30分钟检查一次
-
-# 活动操作
 POSITION_COST = 71704.83
-POSITION_SHARES = 83236.35
-CURRENT_MARKET = POSITION_SHARES * BASE_NAV
-POSITION_LOSS = POSITION_COST - CURRENT_MARKET
-POSITION_LOSS_RATE = POSITION_LOSS / POSITION_COST
+# 用户确认：净值 ¥0.7761 时市值 ¥65,454.42
+CONFIRMED_MV = 65454.42
+CONFIRMED_BASE = 0.7761
+TOTAL_SHARES = CONFIRMED_MV / CONFIRMED_BASE
 
-# T-Size: ~10% of holding
-T_SHARES = 8000
+# ============================================================
+# 当前 T 仓（已开）
+# ============================================================
+T_COST = 10000.00
+T_ENTRY_NAV = 0.7442
+T_SHARES = 13437
 
-# 关键价位
-BUY_LEVELS = [
-    {"price": 0.7606, "pct": -2.0, "trigger": "BUY", "size": T_SHARES, "note": "首次入场"},
-    {"price": 0.7454, "pct": -4.0, "trigger": "BUY", "size": int(T_SHARES * 1.5), "note": "仓位加仓"},
-    {"price": 0.7221, "pct": -7.0, "trigger": "BUY", "size": int(T_SHARES * 1.5), "note": "深度加仓"},
-    {"price": 0.7062, "pct": -9.0, "trigger": "BUY", "size": int(T_SHARES * 2), "note": "重仓"},
+# T 仓止盈止损
+T_TP1 = T_ENTRY_NAV * 1.05
+T_TP2 = T_ENTRY_NAV * 1.08
+T_SL = T_ENTRY_NAV * 0.92
+
+# ============================================================
+# 新开 T 仓点位
+# ============================================================
+NEW_T_ENTRIES = [
+    (0.7606, 8000,  "首次开仓"),
+    (0.7454, 12000, "加仓 1.5x"),
+    (0.7221, 12000, "加仓 1.5x"),
+    (0.7062, 16000, "重仓 2x"),
 ]
 
-SELL_LEVELS = [
-    {"price": 0.7834, "pct": +3.0, "trigger": "SELL_30%", "size": int(T_SHARES * 0.3), "note": "+3%止盈(30%)"},
-    {"price": 0.7986, "pct": +5.0, "trigger": "SELL_30%", "size": int(T_SHARES * 0.3), "note": "+5%止盈(30%)"},
-    {"price": 0.8214, "pct": +8.0, "trigger": "SELL_40%", "size": int(T_SHARES * 0.4), "note": "+8%止盈(40%)"},
-]
-
-STOP_LOSS = {"price": 0.7000, "pct": 0, "size": "ALL", "note": "止损-8%"}
-
-# 提醒方式
-NOTIFY_METHOD = "system"  # 默认系统通知
+FUND_CODE = "012805"
+CHECK_INTERVAL = 1800
 
 
 def send_notification(title, message):
-    """发送 macOS 系统通知"""
     try:
         script = f'display notification "{message}" with title "{title}" sound name "Hero"'
         subprocess.run(["osascript", "-e", script], check=True)
@@ -62,133 +54,91 @@ def send_notification(title, message):
 
 
 def fetch_current_nav():
-    """获取最新净值"""
     try:
-        url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=jQuery&fundCode={FUND_CODE}&pageIndex=1&pageSize=1&startDate={datetime.now().strftime('%Y-%m-%d')}&endDate={datetime.now().strftime('%Y-%m-%d')}"
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+        url = (f"https://api.fund.eastmoney.com/f10/lsjz"
+               f"?callback=jQuery&fundCode={FUND_CODE}&pageIndex=1&pageSize=1"
+               f"&startDate={start_date}&endDate={end_date}")
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'Referer': 'https://fundf10.eastmoney.com/'})
         resp = urllib.request.urlopen(req, context=ctx, timeout=15)
         content = resp.read().decode('utf-8')
-        start = content.index('(') + 1
-        end = content.rindex(')')
-        data = json.loads(content[start:end])
-        latest = data['Data']['LSJZList'][0]
-        nav = float(latest['DWJZ'])
-        return nav, latest['FSRQ']
+        m = re.match(r'^\w+\((.*)\)$', content.strip(), re.DOTALL)
+        if m:
+            data = json.loads(m.group(1))
+            records = data['Data']['LSJZList']
+            if records:
+                latest = records[0]
+                return float(latest['DWJZ']), latest['FSRQ']
     except Exception as e:
         print(f"   [获取净值失败] {e}")
-        return None, None
-
-
-def check_levels(current_nav, all_levels):
-    """检查当前净值是否触发任何价位"""
-    triggered = []
-    for lvl in all_levels:
-        if lvl['pct'] < 0:  # BUY, 跌到目标以下
-            if current_nav <= lvl['price']:
-                triggered.append(lvl)
-        elif lvl['pct'] > 0:  # SELL, 涨到目标以上
-            if current_nav >= lvl['price']:
-                triggered.append(lvl)
-    return triggered
-
-
-def format_level(lvl):
-    """格式化行情输出"""
-    if lvl['trigger'] == 'BUY':
-        action = f"🟢 买 {lvl['size']:,} 份"
-    elif lvl['trigger'] == 'SELL_30%':
-        action = f"🔴 卖 {lvl['size']:,} 份 (锁利30%)"
-    elif lvl['trigger'] == 'SELL_40%':
-        action = f"🔴 卖 {lvl['size']:,} 份 (锁利40%)"
-    else:
-        action = "全部卖出"
-
-    price = lvl['price']
-    return f"  {action} @ ¥{price:.4f}  {lvl['note']}"
+    return None, None
 
 
 def main():
-    print("=" * 65)
-    print("  012805 净值监控")
-    print("=" * 65)
-    print(f"  启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  当前净值: ¥{BASE_NAV:.4f} | 基准")
-    print(f"  监控间隔: {CHECK_INTERVAL}秒 (每{CHECK_INTERVAL//60}分钟)")
+    print("=" * 60)
+    print("  012805 净值监控（T仓版）")
+    print("=" * 60)
+    print(f"  启动: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  当前 T 仓: ¥{T_COST:,.0f} @ ¥{T_ENTRY_NAV:.4f}（{T_SHARES:,} 份）")
     print()
-
-    # 合并所有价位
-    all_levels = BUY_LEVELS + SELL_LEVELS + [STOP_LOSS]
-
-    print("  监控价位:")
-    print(f"  {'价位':<12} {'操作':<12} {'份数':<12} 说明")
-    print(f"  {'─'*40}")
-
-    buy_info = [(l['price'], l) for l in BUY_LEVELS]
-    sell_info = [(l['price'], l) for l in SELL_LEVELS]
-    all_info = buy_info + sell_info + [(STOP_LOSS['price'], STOP_LOSS)]
-
-    for _, lvl in sorted(all_info, key=lambda x: x[0]):
-        print(f"  ¥{lvl['price']:<10.4f}   {lvl['trigger']:<12} "
-              f"{str(lvl['size']):<12}  {lvl['note']}")
-
+    print("  T 仓止盈/止损:")
+    print(f"    +5% → ¥{T_TP1:.4f} → 卖 {int(T_SHARES*0.6):,} 份（60%）")
+    print(f"    +8% → ¥{T_TP2:.4f} → 卖 {int(T_SHARES*0.4):,} 份（40%）")
+    print(f"    -8% → ¥{T_SL:.4f} → 全出（{T_SHARES:,} 份）")
     print()
-    print(f"  {'─'*65}")
-    print(f"  紧急止损: ¥{STOP_LOSS['price']:.4f} (跌 -8% 全部清仓)")
-    print()
+    print("  新开 T 仓点位:")
+    for nav, shares, label in NEW_T_ENTRIES:
+        print(f"    ¥{nav:.4f} → 买 {shares:,} 份 | {label}")
+    print(f"  {'─'*60}")
 
-    cycle_count = 0
+    cycle = 0
     try:
         while True:
-            cycle_count += 1
+            cycle += 1
             nav, date = fetch_current_nav()
             if nav is None:
                 time.sleep(60)
                 continue
 
-            # 计算持仓盈亏
-            position_pnl = ((nav * POSITION_SHARES) - POSITION_COST)
-            position_pnl_pct = (position_pnl / POSITION_COST) * 100
+            t_pnl_pct = (nav / T_ENTRY_NAV - 1) * 100
+            overall_mv = TOTAL_SHARES * nav
+            overall_pnl = overall_mv - POSITION_COST
+            overall_pnl_pct = (overall_pnl / POSITION_COST) * 100
 
-            triggered = check_levels(nav, all_levels)
+            triggered = []
+
+            # T 仓止盈
+            if nav >= T_TP1:
+                triggered.append(("🟢 T止盈", f"+5% ¥{T_TP1:.4f} → 卖 {int(T_SHARES*0.6):,} 份（60%）"))
+            if nav >= T_TP2:
+                triggered.append(("🟢 T止盈", f"+8% ¥{T_TP2:.4f} → 卖 {int(T_SHARES*0.4):,} 份（40%）"))
+
+            # 止损
+            if nav <= T_SL:
+                triggered.append(("🔴 T止损", f"-8% ¥{T_SL:.4f} → 全出 {T_SHARES:,} 份"))
+
+            # 新 T 入场
+            for entry_nav, entry_shares, label in NEW_T_ENTRIES:
+                if nav <= entry_nav:
+                    triggered.append(("🟢 新T入场", f"¥{entry_nav:.4f} → 买 {entry_shares:,} 份 | {label}"))
+
             if triggered:
-                print(f"\n  {'='*60}")
-                print(f"  ⚡ 触发提醒 @ {datetime.now().strftime('%H:%M:%S')}")
-                print(f"  {'='*60}")
-
-                msg_title = f"012805"
-                msg_body = f""
-
-                for lvl in triggered:
-                    nav_rounded = lvl['price']
-                    notif_msg = format_level(lvl)
-                    print(format_time(), notif_msg)
-                    msg_body += notif_msg + "\n"
-
-                print(f"  持仓盈亏: {position_pnl_pct:+.2f}% (¥{position_pnl:+.0f})")
+                print(f"\n  {'='*55}")
+                print(f"  ⚡ 触发 @ {datetime.now().strftime('%H:%M:%S')}")
+                for tag, msg in triggered:
+                    print(f"  {tag}: {msg}")
+                    send_notification(f"012805 {tag}", msg)
+                print(f"  整体盈亏: {overall_pnl_pct:+.2f}% | T仓盈亏: {t_pnl_pct:+.1f}%")
                 print(f"  净值: ¥{nav:.4f} ({date})")
-                msg_body += f"\n"
-                msg_body += f"持仓盈亏: {position_pnl_pct:+.2f}% (¥{position_pnl:+.0f})\n"
-                msg_body += f"净值: ¥{nav:.4f} ({date})\n"
-
-                # 发系统通知
-                if triggered and triggered[0]['trigger'] == 'SELL_30%':
-                    msg_title += " 🔴卖信号"
-                elif triggered and triggered[0]['trigger'] == 'BUY':
-                    msg_title += " 🟢买信号"
-                sent = False
-                for lvl in triggered:
-                    send_notification(msg_title, format_level(lvl))
-                    sent = True
-                if not sent:
-                    send_notification(msg_title, "触发关键价位")
-
+                print(f"  {'='*55}")
             else:
-                if cycle_count % 4 == 0:  # 每2小时输出状态
-                    print(f"  [{datetime.now().strftime('%H:%M')}] ¥{nav:.4f} (盈亏:{position_pnl_pct:+.1f}%) "
-                          f"无触发 | RS:{nav:.0f} ¥{nav:.4f}")
+                if cycle % 4 == 0:
+                    print(f"  [{datetime.now().strftime('%H:%M')}] ¥{nav:.4f} | "
+                          f"整体 {overall_pnl_pct:+.1f}% | T仓 {t_pnl_pct:+.1f}% | 无触发")
 
             time.sleep(CHECK_INTERVAL)
 
