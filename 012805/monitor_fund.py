@@ -76,7 +76,8 @@ def fetch_latest_nav(fund_code):
                 f"https://fundgz.1234567.com.cn/js/{fund_code}.js"
                 f"?rt={datetime.now().timestamp()}"
             )
-            resp = requests.get(url, timeout=15)
+            headers = {"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, headers=headers, timeout=15)
             text = resp.text
             import re
             m = re.search(r'jsonpgz\((.+)\)', text)
@@ -86,7 +87,7 @@ def fetch_latest_nav(fund_code):
                 date = data["jzrq"]
                 return nav, date
             else:
-                print(f"未能解析JSON: {text[:100]}")
+                print(f"未能解析JSON: {text[:200]}")
         except Exception as e:
             print(f"  获取净值失败 attempt {attempt+1}: {e}")
     return None, None
