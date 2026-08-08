@@ -171,102 +171,103 @@ def generate_report(nav, date, t_status, new_triggered, new_pending):
     if t_status["sl_triggered"]:
         title += " 止损"
 
-    # ---- 正文 ----
+    L = "━━━━━━━━━━━━━━"
+
     lines = []
-    lines.append(f"012805 ¥{nav:.4f} | T仓 {t_status['t_pnl_pct']:+.1f}%")
+    # ========== 头部 ==========
+    lines.append(L)
+    lines.append(f"  012805 每日监控")
+    lines.append(f"  {date}  |  ¥{nav:.4f}")
+    lines.append(L)
+
+    # ========== 整体持仓（前置） ==========
     lines.append(f"")
+    lines.append(f"💰 整体持仓")
+    lines.append(f"  市值 ¥{overall_market:,.0f}  盈亏 {overall_pnl_pct:+.1f}%")
+    lines.append(f"  投入 ¥{POSITION_COST:,.0f}  浮动 ¥{overall_pnl:+,.0f}")
 
-    # ==== 触发动作（前置高亮）====
+    # ========== T仓概要 ==========
+    lines.append(f"")
+    lines.append(f"📌 T仓 | 成本 ¥{T_COST:,.0f}  均价 ¥{T_ENTRY_NAV:.4f}")
+    lines.append(f"  市值 ¥{t_status['t_market']:,.0f}  盈亏 {t_status['t_pnl_pct']:+.1f}%")
+
+    # ========== 触发动作（高亮） ==========
+    lines.append(f"")
+    lines.append(L)
+
     if has_alert:
-        lines.append(f"⚡ 立即操作")
-        lines.append(f"━━━━━━━━━━")
-
         for tp in t_status["triggered_tp"]:
             proceeds = tp["sell_shares"] * nav
             lines.append(f"")
-            lines.append(f"🟢 +{tp['pct']}% 止盈触发 ¥{tp['nav']:.4f}")
-            lines.append(f"   卖出 {tp['sell_shares']:,} 份 ({tp['sell_pct']}%)")
-            lines.append(f"   回款约 ¥{proceeds:,.0f}")
+            lines.append(f"🟢 止盈触发 +{tp['pct']}%")
+            lines.append(f"")
+            lines.append(f"  >>> 卖出 {tp['sell_shares']:,} 份 ({tp['sell_pct']}%)")
+            lines.append(f"  >>> 回款约 ¥{proceeds:,.0f}")
+            lines.append(f"")
 
         if t_status["sl_triggered"]:
             lines.append(f"")
-            lines.append(f"🔴 -8% 止损触发 ¥{t_status['sl_nav']:.4f}")
-            lines.append(f"   全出 {T_SHARES:,} 份")
+            lines.append(f"🔴 止损触发 -8%")
+            lines.append(f"")
+            lines.append(f"  >>> 全出 {T_SHARES:,} 份")
+            lines.append(f"  >>> 回收约 ¥{T_SHARES * nav:,.0f}")
+            lines.append(f"")
 
         for entry in new_triggered:
             cost = entry["shares"] * nav
             lines.append(f"")
-            lines.append(f"🟢 新T入场 ¥{entry['nav']:.4f}（{entry['pct']:+.0f}%）")
-            lines.append(f"   买入 {entry['shares']:,} 份")
-            lines.append(f"   需资金约 ¥{cost:,.0f}")
+            lines.append(f"🟢 开仓触发 {entry['pct']:+.0f}% @ ¥{entry['nav']:.4f}")
+            lines.append(f"")
+            lines.append(f"  >>> 买入 {entry['shares']:,} 份")
+            lines.append(f"  >>> 需资金约 ¥{cost:,.0f}")
+            lines.append(f"")
 
     else:
-        lines.append(f"⏳ 持仓观望")
-        lines.append(f"━━━━━━━━━━")
-        lines.append(f"无触发点位")
+        lines.append(f"")
+        lines.append(f"  ⏳ 持仓观望，无触发")
         lines.append(f"")
 
-        # 下一步：最近的操作点
-        # Find the closest upcoming action
+        # 最近的下一个操作点
         upcoming = []
         for tp in t_status["tp_levels"]:
             if not tp["triggered"]:
-                upcoming.append(("止盈", tp["nav"], f"+{tp['pct']}% 卖 {tp['sell_pct']}%"))
-        if not t_status["sl_triggered"]:
-            # Only add if very close (within 15%)
-            sl_dist = (nav - t_status["sl_nav"]) / nav * 100
-            if sl_dist < 20:
-                upcoming.append(("止损", t_status["sl_nav"], "全出"))
-
-        for entry in new_pending[:2]:  # show closest 2
-            upcoming.append(("开仓", entry["nav"], f"买 {entry['shares']:,} 份"))
+                upcoming.append(("止盈", tp["nav"], f"+{tp['pct']}%", f"卖 {tp['sell_pct']}%"))
+        for entry in new_pending:
+            upcoming.append(("开仓", entry["nav"], f"{entry['pct']:+.0f}%", f"买 {entry['shares']:,}份"))
 
         if upcoming:
             upcoming.sort(key=lambda x: abs(x[1] - nav))
-            next_action = upcoming[0]
-            gap = abs(next_action[1] - nav)
-            lines.append(f"下一步: {next_action[0]} ¥{next_action[1]:.4f} {next_action[2]}")
-            lines.append(f"距当前 ¥{gap:.4f}")
+            n = upcoming[0]
+            gap = abs(n[1] - nav)
+            lines.append(f"  下一步 {n[0]} {n[2]} @ ¥{n[1]:.4f}")
+            lines.append(f"  距当前 ¥{gap:.4f}")
 
-    # ==== T仓详情 ====
+    lines.append(L)
+
+    # ========== T仓价位明细 ==========
     lines.append(f"")
-    lines.append(f"📌 T仓止盈位")
-    lines.append(f"━━━━━━━━━━")
+    lines.append(f"T仓止盈/止损")
     for tp in t_status["tp_levels"]:
-        icon = "✅" if tp["triggered"] else "  "
         gap = abs(tp["nav"] - nav)
         if tp["triggered"]:
-            lines.append(f"{icon} +{tp['pct']}% ¥{tp['nav']:.4f} 卖{tp['sell_pct']}% ⚡已触发")
+            lines.append(f"  ✅ +{tp['pct']}% ¥{tp['nav']:.4f}  卖{tp['sell_pct']}%  >> 已触发")
         else:
-            lines.append(f"{icon} +{tp['pct']}% ¥{tp['nav']:.4f} 卖{tp['sell_pct']}% 差¥{gap:.4f}")
+            lines.append(f"  ·  +{tp['pct']}% ¥{tp['nav']:.4f}  卖{tp['sell_pct']}%  差¥{gap:.4f}")
 
-    lines.append(f"")
-    lines.append(f"📌 T仓止损")
-    lines.append(f"━━━━━━━━━━")
     sl_gap = nav - t_status["sl_nav"]
     if t_status["sl_triggered"]:
-        lines.append(f"🔴 -8% ¥{t_status['sl_nav']:.4f} 全出 ⚡已触发")
+        lines.append(f"  🔴 -8% ¥{t_status['sl_nav']:.4f}  全出  >> 已触发")
     else:
-        lines.append(f"   -8% ¥{t_status['sl_nav']:.4f} 全出 距离¥{sl_gap:.4f}")
+        lines.append(f"  ·  -8% ¥{t_status['sl_nav']:.4f}  全出  距离¥{sl_gap:.4f}")
 
-    # ==== 新T入场 ====
     lines.append(f"")
-    lines.append(f"📌 新开T仓")
-    lines.append(f"━━━━━━━━━━")
+    lines.append(f"新开T仓点位")
     for entry in NEW_T_ENTRIES:
-        icon = "🟢" if nav <= entry["nav"] else "  "
         gap = (entry["nav"] / nav - 1) * 100
         if nav <= entry["nav"]:
-            lines.append(f"{icon} ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%) 买{entry['shares']:,}份 ⚡触发")
+            lines.append(f"  🟢 ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%)  {entry['shares']:,}份  已触发")
         else:
-            lines.append(f"{icon} ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%) 买{entry['shares']:,}份 距{gap:+.1f}%")
-
-    # ==== 整体持仓 ====
-    lines.append(f"")
-    lines.append(f"💰 整体持仓")
-    lines.append(f"━━━━━━━━━━")
-    lines.append(f"净值 ¥{nav:.4f} | 市值 ¥{overall_market:,.0f}")
-    lines.append(f"总投入 ¥{POSITION_COST:,.0f} | 亏损 ¥{overall_pnl:+,.0f} ({overall_pnl_pct:+.1f}%)")
+            lines.append(f"  ·  ¥{entry['nav']:.4f} ({entry['pct']:+.0f}%)  {entry['shares']:,}份  距{gap:+.1f}%")
 
     content = "\n".join(lines)
     return title, content
