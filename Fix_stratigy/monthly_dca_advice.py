@@ -13,7 +13,6 @@ FUND_META = {
         "fund_code": "004744",
         "fund_name": "易方达创业板ETF联接C",
         "index_code": "399006",
-        "pe_fallback_lg": "创业板50",
     },
     "022429": {
         "fund_code": "022429",
@@ -25,25 +24,54 @@ FUND_META = {
 BASE_AMOUNT = 2000
 
 
+def _fetch_etfrun_pe(code):
+    import pandas as pd
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/x-component",
+    }
+    url = f"https://www.etf.run/index/SSE/{code}"
+    resp = requests.get(url, headers=headers, timeout=15)
+    text = resp.text
+
+    pe_pct = float(re.search(r"当前分位[^>]*>[^>]*>([\d.]+)%", text).group(1))
+    p20 = float(re.search(r"20%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    p50 = float(re.search(r"50%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    p80 = float(re.search(r"80%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    pe_val = float(re.search(r"当前PE[：:]\s*([\d.]+)", text).group(1))
+    return pe_val, pe_pct
+
+
 def fetch_index_pe(index_code, fallback_lg=None):
     import akshare as ak
     try:
         if index_code == "000510":
-            df = ak.stock_zh_index_value_csindex(symbol=index_code)
-            col = "市盈率1"
+            latest_val, percentile = _fetch_etfrun_pe(index_code)
             source_type = "pe"
+            return {
+                "latest_val": latest_val,
+                "percentile": percentile,
+                "source_type": source_type,
+            }
+        elif index_code == "399006":
+            df = ak.stock_market_pe_lg(symbol="创业板")
+            col = "平均市盈率"
+            source_type = "pe"
+            vals = df[col].dropna()
         elif index_code == "HSTECH":
             df = ak.stock_hk_index_daily_sina(symbol=index_code)
             col = "close"
             source_type = "price"
+            vals = df[col].dropna()
         elif fallback_lg:
             df = ak.stock_index_pe_lg(symbol=fallback_lg)
             col = "滚动市盈率"
             source_type = "pe"
+            vals = df[col].dropna()
         else:
             return None
 
-        vals = df[col].dropna()
         latest_val = vals.iloc[-1]
         percentile = round((vals < latest_val).sum() / len(vals) * 100, 1)
         return {

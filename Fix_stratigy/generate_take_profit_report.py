@@ -16,9 +16,8 @@ FUND_META = {
         "fund_name": "易方达创业板ETF联接C",
         "index_code": "399006",
         "index_name": "创业板指",
-        "pe_fallback_lg": "创业板50",
-        "target_return": [20, 30, 50],
-        "target_sell_pct": [30, 30, 40],
+        "target_return": [10, 20, 30, 40, 50],
+        "target_sell_pct": [20, 20, 20, 20, 20],
         "pe_sell_threshold": [85, 95],
         "pe_sell_pct": [50, 50],
     },
@@ -96,25 +95,66 @@ def fetch_nav_history(fund_code):
         return {}
 
 
+def _fetch_etfrun_pe(code):
+    import pandas as pd
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/x-component",
+    }
+    url = f"https://www.etf.run/index/SSE/{code}"
+    resp = requests.get(url, headers=headers, timeout=15)
+    text = resp.text
+
+    pe_pct = float(re.search(r"当前分位[^>]*>[^>]*>([\d.]+)%", text).group(1))
+    p20 = float(re.search(r"20%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    p50 = float(re.search(r"50%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    p80 = float(re.search(r"80%\s*分位[^>]*>[^>]*>([\d.]+)", text).group(1))
+    pe_val = float(re.search(r"当前PE[：:]\s*([\d.]+)", text).group(1))
+
+    pe_40 = round(p20 + (p50 - p20) * 2 / 3, 2)
+    pe_60 = round(p50 + (p80 - p50) / 3, 2)
+    p85 = round(p50 + (p80 - p50) * 0.875, 2)
+    p95 = round(p50 + (p80 - p50) * 2.25, 2)
+
+    return pe_val, pe_pct, p20, pe_40, pe_60, p80, p85, p95
+
+
 def fetch_index_pe(index_code, fallback_lg=None):
     import akshare as ak
     try:
-        if index_code in ("000510",):
-            df = ak.stock_zh_index_value_csindex(symbol=index_code)
-            col = "市盈率1"
+        if index_code == "000510":
+            latest_val, percentile, pe_20, pe_40, pe_60, pe_80, pe_85, pe_95 = _fetch_etfrun_pe(index_code)
             source_type = "pe"
+            return {
+                "latest_pe": latest_val,
+                "percentile": percentile,
+                "source_type": source_type,
+                "pe_20": pe_20,
+                "pe_40": pe_40,
+                "pe_60": pe_60,
+                "pe_80": pe_80,
+                "pe_85": pe_85,
+                "pe_95": pe_95,
+            }
+        elif index_code == "399006":
+            df = ak.stock_market_pe_lg(symbol="创业板")
+            col = "平均市盈率"
+            source_type = "pe"
+            vals = df[col].dropna()
         elif index_code == "HSTECH":
             df = ak.stock_hk_index_daily_sina(symbol=index_code)
             col = "close"
             source_type = "price"
+            vals = df[col].dropna()
         elif fallback_lg:
             df = ak.stock_index_pe_lg(symbol=fallback_lg)
             col = "滚动市盈率"
             source_type = "pe"
+            vals = df[col].dropna()
         else:
             return None
 
-        vals = df[col].dropna()
         latest_val = vals.iloc[-1]
         percentile = round((vals < latest_val).sum() / len(vals) * 100, 1)
         return {
@@ -329,55 +369,64 @@ def generate_html(funds_data, nav_date):
         fund_sections.append(section)
 
     # 止盈策略说明
+    # 构建各基金的目标收益策略行
+    target_rows = ""
+    for fd in funds_data:
+        cfg = fd["config"]
+        tr = cfg.get("target_return", [])
+        sp = cfg.get("target_sell_pct", [])
+        name = cfg["fund_name"]
+        target_rows += f'<tr style="border-bottom:1px solid #eee"><td colspan="2" style="font-size:11px;color:#999;padding:6px 0 2px">{name}</td></tr>'
+        for i in range(len(tr)):
+            target_rows += f'<tr style="border-bottom:1px solid #f6f6f6"><td>≥ {tr[i]}%</td><td style="text-align:center;color:#c53030">卖出 {sp[i]}%</td></tr>'
+
     strategy_html = f"""
-<div style="border-top:2px dashed #d0d0d0;margin:14px 0 8px"></div>
+    <div style="border-top:2px dashed #d0d0d0;margin:14px 0 8px"></div>
 
-<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.06)">
-<div style="font-size:15px;font-weight:600;color:#2b4c7e;text-align:center;margin:0 0 12px 0">📋 附录 · 策略说明</div>
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.06)">
+    <div style="font-size:15px;font-weight:600;color:#2b4c7e;text-align:center;margin:0 0 12px 0">📋 附录 · 策略说明</div>
 
-<div style="margin-bottom:10px">
-<div style="font-size:13px;font-weight:600;color:#2b6cb0;margin-bottom:6px">📈 买入三原则</div>
+    <div style="margin-bottom:10px">
+    <div style="font-size:13px;font-weight:600;color:#2b6cb0;margin-bottom:6px">📈 买入三原则</div>
 
-<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
-<b style="color:#dd6b20">原则一 · PE百分位定方向</b><br>
-PE &lt; 60% → 正常定投 | PE 60%~80% → 减半定投 | PE &gt; 80% → 暂停定投
-</div>
+    <div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
+    <b style="color:#dd6b20">原则一 · PE百分位定方向</b><br>
+    PE &lt; 60% → 正常定投 | PE 60%~80% → 减半定投 | PE &gt; 80% → 暂停定投
+    </div>
 
-<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
-<b style="color:#dd6b20">原则二 · 净值回调抓节奏</b><br>
-持仓净值每跌 <b>5%</b> 追加 1 份（约 ¥5,000）；再跌 <b>10%</b> 追加 2 份
-</div>
+    <div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:6px">
+    <b style="color:#dd6b20">原则二 · 净值回调抓节奏</b><br>
+    持仓净值每跌 <b>5%</b> 追加 1 份（约 ¥5,000）；再跌 <b>10%</b> 追加 2 份
+    </div>
 
-<div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:10px">
-<b style="color:#dd6b20">原则三 · 低估区加倍</b><br>
-PE &lt; 40% 时，每期定投金额 × 1.5；PE &lt; 20% 时 × 2.0
-</div>
-</div>
+    <div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:10px">
+    <b style="color:#dd6b20">原则三 · 低估区加倍</b><br>
+    PE &lt; 40% 时，每期定投金额 × 1.5；PE &lt; 20% 时 × 2.0
+    </div>
+    </div>
 
-<div>
-<div style="font-size:13px;font-weight:600;color:#c53030;margin-bottom:6px">🔔 卖出双信号（谁先触发按谁执行）</div>
+    <div>
+    <div style="font-size:13px;font-weight:600;color:#c53030;margin-bottom:6px">🔔 卖出双信号（谁先触发按谁执行）</div>
 
-<div style="margin-bottom:6px">
-<div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号一 · 目标收益止盈</div>
-<table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
-<tr style="border-bottom:1px solid #eee"><td>累计收益率</td><td style="text-align:center;color:#999">操作</td></tr>
-<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 20%</td><td style="text-align:center;color:#c53030">卖出 30%</td></tr>
-<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 30%</td><td style="text-align:center;color:#c53030">再卖 30%</td></tr>
-<tr><td>≥ 50%</td><td style="text-align:center;color:#c53030">清仓</td></tr>
-</table>
-</div>
+    <div style="margin-bottom:6px">
+    <div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号一 · 目标收益止盈</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
+    <tr style="border-bottom:1px solid #eee"><td>累计收益率</td><td style="text-align:center;color:#999">操作</td></tr>
+    {target_rows}
+    </table>
+    </div>
 
-<div>
-<div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号二 · 估值止盈（PE/点位百分位）</div>
-<table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
-<tr style="border-bottom:1px solid #eee"><td>PE百分位</td><td style="text-align:center;color:#999">操作</td></tr>
-<tr style="border-bottom:1px solid #f6f6f6"><td>≥ 85%</td><td style="text-align:center;color:#c53030">卖出 50%</td></tr>
-<tr><td>≥ 95%</td><td style="text-align:center;color:#c53030">清仓</td></tr>
-</table>
-</div>
-</div>
-</div>
-"""
+    <div>
+    <div style="font-size:12px;font-weight:600;color:#dd6b20;margin-bottom:3px">信号二 · 估值止盈（PE/点位百分位）</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;color:#555">
+    <tr style="border-bottom:1px solid #eee"><td>PE百分位</td><td style="text-align:center;color:#999">操作</td></tr>
+    <tr style="border-bottom:1px solid #f6f6f6"><td>≥ 85%</td><td style="text-align:center;color:#c53030">卖出 50%</td></tr>
+    <tr><td>≥ 95%</td><td style="text-align:center;color:#c53030">清仓</td></tr>
+    </table>
+    </div>
+    </div>
+    </div>
+    """
 
     signals_badge = ""
     if has_any_signal:

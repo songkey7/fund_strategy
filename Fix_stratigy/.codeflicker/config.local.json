@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Fetch(domain:fundgz.1234567.com.cn)",
-      "Fetch(domain:fundf10.eastmoney.com)"
+      "Fetch(domain:fundf10.eastmoney.com)",
+      "Fetch(domain:legulegu.com)",
+      "Fetch(domain:www.etf.run)",
+      "Fetch(domain:qieman.com)"
     ]
   }
 }
